@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase.ts';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -12,7 +13,7 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (!name.trim() || !email.trim() || !password) {
       Alert.alert('Error', 'Please fill in all required fields.');
       return;
@@ -20,11 +21,35 @@ export default function SignupScreen() {
 
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+        options: {
+          data: {
+            full_name: name.trim(),
+          },
+        },
+      });
+
       setLoading(false);
-      Alert.alert('Success!', 'Account created successfully.');
+
+      if (error) {
+        Alert.alert('Signup failed', error.message);
+        return;
+      }
+
+      // If Supabase successfully processes it:
+      Alert.alert(
+        'Success',
+        'Account created! Please check your email (if confirmation is enabled).'
+      );
       router.replace('/(tabs)');
-    }, 200);
+
+    } catch (err: any) {
+      setLoading(false);
+      Alert.alert('Unexpected Error', err.message || 'An error occurred.');
+    }
   };
 
   return (
@@ -96,7 +121,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justify: 'center',
     padding: 24,
     gap: 16,
   },
@@ -118,7 +143,7 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justify: 'center',
     backgroundColor: '#0a7ea4',
     borderRadius: 14,
     paddingVertical: 16,
@@ -134,7 +159,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justify: 'center',
     gap: 4,
     marginTop: 8,
   },

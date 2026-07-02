@@ -1,6 +1,7 @@
+import { supabase } from '@/lib/supabase.ts';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -11,7 +12,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email.trim() || !password) {
       Alert.alert('Error', 'Please enter your email and password.');
       return;
@@ -19,10 +20,26 @@ export default function LoginScreen() {
 
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
+
       setLoading(false);
+
+      if (error) {
+        Alert.alert('Login failed', error.message);
+        return;
+      }
+
+      // If successful, navigate to tabs
       router.replace('/(tabs)');
-    }, 200);
+      
+    } catch (err: any) {
+      setLoading(false);
+      Alert.alert('Unexpected Error', err.message || 'An error occurred.');
+    }
   };
 
   return (
@@ -59,11 +76,15 @@ export default function LoginScreen() {
         <Pressable
           disabled={loading}
           onPress={handleLogin}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+          style={({ pressed }) => [styles.button, (pressed || loading) && styles.buttonPressed]}
         >
-          <ThemedText type="subtitle" style={styles.buttonText}>
-            {loading ? 'Logging in...' : 'Log in'}
-          </ThemedText>
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <ThemedText type="subtitle" style={styles.buttonText}>
+              Log in
+            </ThemedText>
+          )}
         </Pressable>
 
         <View style={styles.footerRow}>
@@ -83,7 +104,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justify: 'center',
     padding: 24,
     gap: 16,
   },
@@ -105,11 +126,12 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justify: 'center',
     backgroundColor: '#0a7ea4',
     borderRadius: 14,
     paddingVertical: 16,
     marginTop: 8,
+    minHeight: 56,
   },
   buttonPressed: {
     opacity: 0.85,
@@ -120,7 +142,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justify: 'center',
     gap: 4,
     marginTop: 8,
   },
