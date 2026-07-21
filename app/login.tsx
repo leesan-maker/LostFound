@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase.ts';
+import { supabase } from '@/lib/supabase';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -103,10 +103,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    flex: 1,
-    justify: 'center',
-    padding: 24,
-    gap: 16,
+  flex: 1,
+  justifyContent: 'center',
+  padding: 24,
+  gap: 16,
   },
   title: {
     marginBottom: 8,
@@ -125,8 +125,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.92)',
   },
   button: {
-    alignItems: 'center',
-    justify: 'center',
+  alignItems: 'center',
+  justifyContent: 'center',
     backgroundColor: '#0a7ea4',
     borderRadius: 14,
     paddingVertical: 16,
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justify: 'center',
+    justifyContent: 'center',
     gap: 4,
     marginTop: 8,
   },
