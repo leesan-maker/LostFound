@@ -1,5 +1,11 @@
+import { supabase } from '@/lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
+  Image,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -11,6 +17,9 @@ import {
 } from 'react-native';
 
 export default function ReportItemScreen() {
+  const router = useRouter();
+
+  // Form State
   const [reportType, setReportType] = useState<'lost' | 'found'>('lost');
   const [itemName, setItemName] = useState('');
   const [description, setDescription] = useState('');
@@ -18,9 +27,123 @@ export default function ReportItemScreen() {
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Modal Popups State
+  const [validationModalVisible, setValidationModalVisible] = useState(false);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
 
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
+
+  // Reset form inputs back to default
+  const resetForm = () => {
+    setReportType('lost');
+    setItemName('');
+    setDescription('');
+    setDate(new Date().toISOString().split('T')[0]);
+    setLocation('');
+    setPhone('');
+    setEmail('');
+    setImageUri(null);
+  };
+
+  // Pick Image from Library
+  const handlePickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      alert('Permission to access gallery is required to upload photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]?.uri) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  // Upload Image file to Supabase Storage
+  const uploadImageToSupabase = async (uri: string): Promise<string> => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const fileExt = uri.split('.').pop()?.split('?')[0] || 'jpg';
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('item-photos')
+      .upload(fileName, blob, {
+        contentType: `image/${fileExt === 'png' ? 'png' : 'jpeg'}`,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('item-photos')
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  };
+
+  const handleSubmit = async () => {
+    // Check if any required field is empty
+    if (
+      !itemName.trim() ||
+      !description.trim() ||
+      !date.trim() ||
+      !location.trim() ||
+      !phone.trim() ||
+      !email.trim()
+    ) {
+      setValidationModalVisible(true);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      let finalImageUrl = 'https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=800'; // Default placeholder
+
+      // Upload custom photo if provided
+      if (imageUri) {
+        finalImageUrl = await uploadImageToSupabase(imageUri);
+      }
+
+      const { error } = await supabase.from('items').insert([
+        {
+          type: reportType,
+          title: itemName,
+          description,
+          date,
+          location,
+          phone,
+          email,
+          image_url: finalImageUrl,
+        },
+      ]);
+
+      if (error) throw error;
+
+      // Show success modal popup
+      setSuccessModalVisible(true);
+    } catch (err: any) {
+      alert('Submission Error: ' + (err.message || 'Something went wrong while submitting.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSuccessClose = () => {
+    setSuccessModalVisible(false);
+    resetForm(); // Reset all form fields
+    router.push('/(tabs)'); // Navigate back home
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
@@ -29,7 +152,7 @@ export default function ReportItemScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Lost &amp; Found</Text>
-          <TouchableOpacity style={styles.cancelButton}>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => router.push('/(tabs)')}>
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -74,20 +197,22 @@ export default function ReportItemScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Section Subtitle */}
+          {/* Subtitle */}
           <View>
             <Text style={styles.sectionTitle}>
               {reportType === 'lost' ? 'Report Lost Item' : 'Report Found Item'}
             </Text>
             <Text style={styles.sectionSubtext}>
-              Fill in the details below to help others identify your item
+              Fill in all details below to help others identify your item
             </Text>
           </View>
 
-          {/* Item Name & Date (Side by side on Desktop with aligned tops) */}
+          {/* Item Name & Date */}
           <View style={isDesktop ? styles.row : styles.column}>
             <View style={[styles.fieldGroup, isDesktop && styles.flex1]}>
-              <Text style={styles.label}>Item Name</Text>
+              <Text style={styles.label}>
+                Item Name <Text style={styles.requiredStar}>*</Text>
+              </Text>
               <Text style={styles.sectionSubtext}>What item are you reporting?</Text>
               <TextInput
                 style={styles.input}
@@ -99,10 +224,11 @@ export default function ReportItemScreen() {
             </View>
 
             <View style={[styles.fieldGroup, isDesktop && styles.flex1]}>
-              <Text style={styles.label}>Date</Text>
+              <Text style={styles.label}>
+                Date <Text style={styles.requiredStar}>*</Text>
+              </Text>
               <Text style={styles.sectionSubtext}>When was it lost or found?</Text>
               {Platform.OS === 'web' ? (
-                /* HTML Date Picker for Web */
                 <input
                   type="date"
                   value={date}
@@ -135,7 +261,9 @@ export default function ReportItemScreen() {
 
           {/* Description */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>
+              Description <Text style={styles.requiredStar}>*</Text>
+            </Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Describe color, brand, distinguishing features..."
@@ -149,7 +277,9 @@ export default function ReportItemScreen() {
 
           {/* Location */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Location</Text>
+            <Text style={styles.label}>
+              Location <Text style={styles.requiredStar}>*</Text>
+            </Text>
             <TextInput
               style={styles.input}
               placeholder="e.g., Library 2nd Floor, Computer Lab B"
@@ -166,7 +296,9 @@ export default function ReportItemScreen() {
 
           <View style={isDesktop ? styles.row : styles.column}>
             <View style={[styles.fieldGroup, isDesktop && styles.flex1]}>
-              <Text style={styles.label}>Phone Number</Text>
+              <Text style={styles.label}>
+                Phone Number <Text style={styles.requiredStar}>*</Text>
+              </Text>
               <TextInput
                 style={styles.input}
                 placeholder="+1 (555) 123-4567"
@@ -178,7 +310,9 @@ export default function ReportItemScreen() {
             </View>
 
             <View style={[styles.fieldGroup, isDesktop && styles.flex1]}>
-              <Text style={styles.label}>Email Address</Text>
+              <Text style={styles.label}>
+                Email Address <Text style={styles.requiredStar}>*</Text>
+              </Text>
               <TextInput
                 style={styles.input}
                 placeholder="your.email@wsc.edu"
@@ -190,26 +324,89 @@ export default function ReportItemScreen() {
             </View>
           </View>
 
-          {/* Photo Upload Box */}
+          {/* Photo Upload Box (OPTIONAL) */}
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Item Photo (optional)</Text>
             <Text style={styles.sectionSubtext}>
               A photo helps others identify your item more easily
             </Text>
 
-            <TouchableOpacity style={styles.uploadBox}>
-              <Text style={styles.uploadTitle}>Tap to select photo</Text>
-              <Text style={styles.uploadSubtitle}>JPG, PNG, or HEIC</Text>
+            <TouchableOpacity style={styles.uploadBox} onPress={handlePickImage}>
+              {imageUri ? (
+                <View style={styles.previewContainer}>
+                  <Image source={{ uri: imageUri }} style={styles.previewImage} />
+                  <Text style={styles.uploadTitle}>Tap to change photo</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.uploadTitle}>Tap to select photo</Text>
+                  <Text style={styles.uploadSubtitle}>JPG, PNG, or HEIC</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 
           {/* Submit Button */}
-          <TouchableOpacity style={styles.submitBtn}>
-            <Text style={styles.submitBtnText}>Submit Report</Text>
+          <TouchableOpacity
+            style={[styles.submitBtn, loading && styles.disabledBtn]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.submitBtnText}>Submit Report</Text>
+            )}
           </TouchableOpacity>
 
         </View>
       </View>
+
+      {/* Validation Warning Modal */}
+      <Modal
+        visible={validationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setValidationModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalIcon}>⚠️</Text>
+            <Text style={styles.modalTitle}>Incomplete Form</Text>
+            <Text style={styles.modalMessage}>
+              Please fill out all the rest of the boxes before submitting your report.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalBtn}
+              onPress={() => setValidationModalVisible(false)}
+            >
+              <Text style={styles.modalBtnText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        visible={successModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleSuccessClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalIcon}>🎉</Text>
+            <Text style={styles.modalTitle}>Report Submitted!</Text>
+            <Text style={styles.modalMessage}>
+              Your item report has been successfully recorded and published.
+            </Text>
+            <TouchableOpacity style={styles.modalBtnSuccess} onPress={handleSuccessClose}>
+              <Text style={styles.modalBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -320,6 +517,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
+  requiredStar: {
+    color: '#ef4444',
+  },
   input: {
     backgroundColor: '#f9fafb',
     borderRadius: 10,
@@ -361,6 +561,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
+  previewContainer: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  previewImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 10,
+  },
   submitBtn: {
     backgroundColor: '#030712',
     borderRadius: 10,
@@ -368,9 +577,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
+  disabledBtn: {
+    opacity: 0.6,
+  },
   submitBtnText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  /* Modal Overlay Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalIcon: {
+    fontSize: 40,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#4b5563',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalBtn: {
+    backgroundColor: '#dc2626',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  modalBtnSuccess: {
+    backgroundColor: '#16a34a',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  modalBtnText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
