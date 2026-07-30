@@ -108,12 +108,12 @@ export default function ReportItemScreen() {
     setLoading(true);
 
     try {
-      let finalImageUrl = 'https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=800'; // Default placeholder
+      let finalImageUrl: string | null = null;
 
-      // Upload custom photo if provided
-      if (imageUri) {
-        finalImageUrl = await uploadImageToSupabase(imageUri);
-      }
+// Upload custom photo if provided
+if (imageUri) {
+  finalImageUrl = await uploadImageToSupabase(imageUri);
+}
 
       const { error } = await supabase.from('items').insert([
         {

@@ -14,6 +14,9 @@ import {
   View,
 } from 'react-native';
 
+// Local placeholder image for items reported without a photo
+const placeholderImage = require('../../assets/images/no-image.png');
+
 interface Item {
   id: string;
   type: 'lost' | 'found';
@@ -23,7 +26,7 @@ interface Item {
   location: string;
   phone?: string;
   email?: string;
-  image_url?: string;
+  image_url?: string | null;
   created_at?: string;
 }
 
@@ -54,7 +57,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Re-fetch items whenever user navigates back to Home tab
   useFocusEffect(
     useCallback(() => {
       fetchItems();
@@ -66,7 +68,6 @@ export default function HomeScreen() {
     fetchItems();
   };
 
-  // Filter items
   const filteredItems = items.filter((item) => {
     if (filter === 'lost') return item.type === 'lost';
     if (filter === 'found') return item.type === 'found';
@@ -101,12 +102,11 @@ export default function HomeScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* Centered Constrained Container (Matches Report Item Page) */}
       <View style={[styles.mainWrapper, isDesktop && styles.mainWrapperDesktop]}>
         
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}> Lost &amp; Found</Text>
+          <Text style={styles.headerTitle}>📦 Lost &amp; Found</Text>
         </View>
 
         {/* Stats Grid */}
@@ -155,14 +155,14 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Items Count Subtitle */}
+        {/* Item Count */}
         <View style={styles.itemCountRow}>
           <Text style={styles.itemCountText}>
             {filteredItems.length} {filteredItems.length === 1 ? 'item' : 'items'}
           </Text>
         </View>
 
-        {/* Item Cards Feed */}
+        {/* Cards Feed */}
         {loading ? (
           <View style={styles.loaderContainer}>
             <ActivityIndicator size="large" color="#111827" />
@@ -179,15 +179,15 @@ export default function HomeScreen() {
             {filteredItems.map((item) => (
               <View key={item.id} style={styles.itemCard}>
                 
-                {/* Item Image */}
+                {/* Image Display */}
                 <Image
-                  source={{
-                    uri:
-                      item.image_url ||
-                      'https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=800',
-                  }}
+                  source={
+                    item.image_url
+                      ? { uri: item.image_url }
+                      : placeholderImage
+                  }
                   style={styles.cardImage}
-                  resizeMode="cover"
+                  resizeMode={item.image_url ? 'cover' : 'contain'}
                 />
 
                 <View style={styles.cardBody}>
@@ -211,7 +211,7 @@ export default function HomeScreen() {
                     <Text style={styles.cardDescription}>{item.description}</Text>
                   )}
 
-                  {/* Location & Date details */}
+                  {/* Details */}
                   <View style={styles.detailsGroup}>
                     <View style={styles.detailRow}>
                       <Text style={styles.detailIcon}>📍</Text>
@@ -224,7 +224,7 @@ export default function HomeScreen() {
                     </View>
                   </View>
 
-                  {/* Contact Action Buttons */}
+                  {/* Contact Buttons */}
                   <View style={styles.actionButtonsRow}>
                     <TouchableOpacity
                       style={styles.callBtn}
@@ -264,11 +264,11 @@ const styles = StyleSheet.create({
   },
   mainWrapper: {
     width: '100%',
-    maxWidth: 500, // Matches report item width
+    maxWidth: 500,
     gap: 16,
   },
   mainWrapperDesktop: {
-    maxWidth: 720, // Matches desktop report item width
+    maxWidth: 720,
   },
   header: {
     backgroundColor: '#ffffff',
@@ -373,6 +373,7 @@ const styles = StyleSheet.create({
   cardImage: {
     width: '100%',
     height: 220,
+    backgroundColor: '#f8fafc',
   },
   cardBody: {
     padding: 18,
@@ -396,10 +397,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   badgeLost: {
-    backgroundColor: '#dc2626', // Red
+    backgroundColor: '#dc2626',
   },
   badgeFound: {
-    backgroundColor: '#030712', // Dark
+    backgroundColor: '#030712',
   },
   badgeText: {
     color: '#ffffff',
@@ -432,7 +433,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   callBtn: {
-    backgroundColor: '#16a34a', // Green
+    backgroundColor: '#16a34a',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
