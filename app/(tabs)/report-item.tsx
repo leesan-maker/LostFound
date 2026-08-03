@@ -1,9 +1,12 @@
 import { supabase } from '@/lib/supabase';
+import { decode } from 'base64-arraybuffer';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Platform,
@@ -18,6 +21,10 @@ import {
 
 export default function ReportItemScreen() {
   const router = useRouter();
+
+  // Permission Hooks
+  const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
+  const [mediaLibraryPermission, requestMediaLibraryPermission] = ImagePicker.useMediaLibraryPermissions();
 
   // Form State
   const [reportType, setReportType] = useState<'lost' | 'found'>('lost');
@@ -49,12 +56,41 @@ export default function ReportItemScreen() {
     setImageUri(null);
   };
 
-  // Pick Image from Library
-  const handlePickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  // Launch Camera
+  const handleTakePhoto = async () => {
+    let hasPermission = cameraPermission?.granted;
 
-    if (!permissionResult.granted) {
-      alert('Permission to access gallery is required to upload photos.');
+    if (!hasPermission) {
+      const permissionResult = await requestCameraPermission();
+      hasPermission = permissionResult.granted;
+    }
+
+    if (!hasPermission) {
+      alert('Camera access is required to take a photo of the item.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]?.uri) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  // Launch Photo Library
+  const handleChooseFromLibrary = async () => {
+    let hasPermission = mediaLibraryPermission?.granted;
+
+    if (!hasPermission) {
+      const permissionResult = await requestMediaLibraryPermission();
+      hasPermission = permissionResult.granted;
+    }
+
+    if (!hasPermission) {
+      alert('Photo library access is required to choose an existing image.');
       return;
     }
 
@@ -69,17 +105,48 @@ export default function ReportItemScreen() {
     }
   };
 
-  // Upload Image file to Supabase Storage
+  // Action prompt launcher for photo selection
+  const handlePickImage = () => {
+    if (Platform.OS === 'web') {
+      const choice = window.confirm(
+        'Click "OK" to take a photo with your camera, or "Cancel" to choose from your gallery.'
+      );
+      if (choice) {
+        handleTakePhoto();
+      } else {
+        handleChooseFromLibrary();
+      }
+    } else {
+      Alert.alert(
+        'Add Item Photo',
+        'Would you like to take a new photo with your camera or select one from your library?',
+        [
+          { text: '📷 Take Photo', onPress: handleTakePhoto },
+          { text: '🖼️ Choose from Library', onPress: handleChooseFromLibrary },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+        { cancelable: true }
+      );
+    }
+  };
+
+  // Upload Image file to Supabase Storage using Base64 ArrayBuffer via Legacy FileSystem
   const uploadImageToSupabase = async (uri: string): Promise<string> => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const fileExt = uri.split('.').pop()?.split('?')[0] || 'jpg';
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    const fileExt = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+
+    const arrayBuffer = decode(base64);
 
     const { error: uploadError } = await supabase.storage
       .from('item-photos')
-      .upload(fileName, blob, {
-        contentType: `image/${fileExt === 'png' ? 'png' : 'jpeg'}`,
+      .upload(fileName, arrayBuffer, {
+        contentType,
+        upsert: true,
       });
 
     if (uploadError) throw uploadError;
@@ -110,10 +177,10 @@ export default function ReportItemScreen() {
     try {
       let finalImageUrl: string | null = null;
 
-// Upload custom photo if provided
-if (imageUri) {
-  finalImageUrl = await uploadImageToSupabase(imageUri);
-}
+      // Upload custom photo if provided
+      if (imageUri) {
+        finalImageUrl = await uploadImageToSupabase(imageUri);
+      }
 
       const { error } = await supabase.from('items').insert([
         {
@@ -339,7 +406,7 @@ if (imageUri) {
                 </View>
               ) : (
                 <>
-                  <Text style={styles.uploadTitle}>Tap to select photo</Text>
+                  <Text style={styles.uploadTitle}>📷 Tap to take or select photo</Text>
                   <Text style={styles.uploadSubtitle}>JPG, PNG, or HEIC</Text>
                 </>
               )}
@@ -585,7 +652,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  /* Modal Overlay Styles */
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
