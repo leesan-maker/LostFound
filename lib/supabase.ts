@@ -1,11 +1,16 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
-const supabaseUrl = 'https://vaomdzazvcqemijkhujp.supabase.co'; // Replace with your actual project URL
-const supabaseAnonKey = 'sb_publishable_thSGK68b5Aq3UGb_sBJ2BQ_ImH26D3O'; // Replace with your actual anon public key
+const supabaseUrl = 'YOUR_SUPABASE_URL'; // Replace with your URL or process.env
+const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY'; // Replace with your Key or process.env
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false, // Disables background storage conflicts on web preview
-    detectSessionInUrl: false, // Stops the server from looking for browser URLs early
+    // Tell Supabase to use AsyncStorage to cache session tokens locally
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: Platform.OS === 'web',
   },
 });

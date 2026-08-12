@@ -1,9 +1,6 @@
-import { supabase } from '@/lib/supabase';
-import { decode } from 'base64-arraybuffer';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +15,10 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+// Use the legacy import path to fix SDK deprecation warnings/errors
+import { supabase } from '@/lib/supabase';
+import { decode } from 'base64-arraybuffer';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export default function ReportItemScreen() {
   const router = useRouter();
@@ -39,27 +40,42 @@ export default function ReportItemScreen() {
 
   // Modal Popups State
   const [validationModalVisible, setValidationModalVisible] = useState(false);
+  const [validationMessage, setValidationMessage] = useState('');
   const [successModalVisible, setSuccessModalVisible] = useState(false);
 
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
 
+  // Pre-fill active account email on load
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email) {
+        setEmail(user.email);
+      }
+    };
+    fetchUserEmail();
+  }, []);
+
   // Reset form inputs back to default
-  const resetForm = () => {
+  const resetForm = async () => {
     setReportType('lost');
     setItemName('');
     setDescription('');
     setDate(new Date().toISOString().split('T')[0]);
     setLocation('');
     setPhone('');
-    setEmail('');
     setImageUri(null);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) {
+      setEmail(user.email);
+    }
   };
 
-  // Launch Camera
+  // Handle Photo Picker
   const handleTakePhoto = async () => {
     let hasPermission = cameraPermission?.granted;
-
     if (!hasPermission) {
       const permissionResult = await requestCameraPermission();
       hasPermission = permissionResult.granted;
@@ -80,10 +96,8 @@ export default function ReportItemScreen() {
     }
   };
 
-  // Launch Photo Library
   const handleChooseFromLibrary = async () => {
     let hasPermission = mediaLibraryPermission?.granted;
-
     if (!hasPermission) {
       const permissionResult = await requestMediaLibraryPermission();
       hasPermission = permissionResult.granted;
@@ -105,17 +119,13 @@ export default function ReportItemScreen() {
     }
   };
 
-  // Action prompt launcher for photo selection
   const handlePickImage = () => {
     if (Platform.OS === 'web') {
       const choice = window.confirm(
         'Click "OK" to take a photo with your camera, or "Cancel" to choose from your gallery.'
       );
-      if (choice) {
-        handleTakePhoto();
-      } else {
-        handleChooseFromLibrary();
-      }
+      if (choice) handleTakePhoto();
+      else handleChooseFromLibrary();
     } else {
       Alert.alert(
         'Add Item Photo',
@@ -130,7 +140,7 @@ export default function ReportItemScreen() {
     }
   };
 
-  // Upload Image file to Supabase Storage using Base64 ArrayBuffer via Legacy FileSystem
+  // Image Upload Handler
   const uploadImageToSupabase = async (uri: string): Promise<string> => {
     const base64 = await FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.Base64,
@@ -158,16 +168,36 @@ export default function ReportItemScreen() {
     return data.publicUrl;
   };
 
+  // Submit Handler with Strict Validations
   const handleSubmit = async () => {
-    // Check if any required field is empty
+    const cleanPhone = phone.trim();
+    const cleanEmail = email.trim();
+
+    // 1. Check Empty Fields
     if (
       !itemName.trim() ||
       !description.trim() ||
       !date.trim() ||
       !location.trim() ||
-      !phone.trim() ||
-      !email.trim()
+      !cleanPhone ||
+      !cleanEmail
     ) {
+      setValidationMessage('Please fill in all required fields before submitting.');
+      setValidationModalVisible(true);
+      return;
+    }
+
+    // 2. Strict Phone Validation (Numbers only, minimum 7 digits)
+    if (cleanPhone.length < 7) {
+      setValidationMessage('Please enter a valid phone number (at least 7 digits).');
+      setValidationModalVisible(true);
+      return;
+    }
+
+    // 3. Strict Email Validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setValidationMessage('Please enter a valid email address (e.g., name@domain.com).');
       setValidationModalVisible(true);
       return;
     }
@@ -175,29 +205,35 @@ export default function ReportItemScreen() {
     setLoading(true);
 
     try {
-      let finalImageUrl: string | null = null;
+      const { data: { user } } = await supabase.auth.getUser();
 
-      // Upload custom photo if provided
+      if (!user) {
+        alert('You must be logged in to submit a report.');
+        setLoading(false);
+        return;
+      }
+
+      let finalImageUrl: string | null = null;
       if (imageUri) {
         finalImageUrl = await uploadImageToSupabase(imageUri);
       }
 
       const { error } = await supabase.from('items').insert([
         {
+          user_id: user.id,
           type: reportType,
           title: itemName,
           description,
           date,
           location,
-          phone,
-          email,
+          phone: cleanPhone,
+          email: cleanEmail,
           image_url: finalImageUrl,
         },
       ]);
 
       if (error) throw error;
 
-      // Show success modal popup
       setSuccessModalVisible(true);
     } catch (err: any) {
       alert('Submission Error: ' + (err.message || 'Something went wrong while submitting.'));
@@ -208,8 +244,8 @@ export default function ReportItemScreen() {
 
   const handleSuccessClose = () => {
     setSuccessModalVisible(false);
-    resetForm(); // Reset all form fields
-    router.push('/(tabs)'); // Navigate back home
+    resetForm();
+    router.push('/(tabs)');
   };
 
   return (
@@ -280,7 +316,6 @@ export default function ReportItemScreen() {
               <Text style={styles.label}>
                 Item Name <Text style={styles.requiredStar}>*</Text>
               </Text>
-              <Text style={styles.sectionSubtext}>What item are you reporting?</Text>
               <TextInput
                 style={styles.input}
                 placeholder="e.g., MacBook Pro, Black Nike backpack"
@@ -294,7 +329,6 @@ export default function ReportItemScreen() {
               <Text style={styles.label}>
                 Date <Text style={styles.requiredStar}>*</Text>
               </Text>
-              <Text style={styles.sectionSubtext}>When was it lost or found?</Text>
               {Platform.OS === 'web' ? (
                 <input
                   type="date"
@@ -362,42 +396,41 @@ export default function ReportItemScreen() {
           <Text style={styles.sectionTitle}>Contact Information</Text>
 
           <View style={isDesktop ? styles.row : styles.column}>
+            {/* Phone Input: Rejects non-numeric characters on change */}
             <View style={[styles.fieldGroup, isDesktop && styles.flex1]}>
               <Text style={styles.label}>
                 Phone Number <Text style={styles.requiredStar}>*</Text>
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="+1 (555) 123-4567"
+                placeholder="5551234567"
                 placeholderTextColor="#9ca3af"
                 keyboardType="phone-pad"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(text) => setPhone(text.replace(/[^0-9]/g, ''))}
               />
             </View>
 
+            {/* Email Input */}
             <View style={[styles.fieldGroup, isDesktop && styles.flex1]}>
               <Text style={styles.label}>
                 Email Address <Text style={styles.requiredStar}>*</Text>
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="your.email@wsc.edu"
+                placeholder="your.email@domain.com"
                 placeholderTextColor="#9ca3af"
                 keyboardType="email-address"
+                autoCapitalize="none"
                 value={email}
                 onChangeText={setEmail}
               />
             </View>
           </View>
 
-          {/* Photo Upload Box (OPTIONAL) */}
+          {/* Photo Upload Box */}
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Item Photo (optional)</Text>
-            <Text style={styles.sectionSubtext}>
-              A photo helps others identify your item more easily
-            </Text>
-
             <TouchableOpacity style={styles.uploadBox} onPress={handlePickImage}>
               {imageUri ? (
                 <View style={styles.previewContainer}>
@@ -439,10 +472,8 @@ export default function ReportItemScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalIcon}>⚠️</Text>
-            <Text style={styles.modalTitle}>Incomplete Form</Text>
-            <Text style={styles.modalMessage}>
-              Please fill out all the rest of the boxes before submitting your report.
-            </Text>
+            <Text style={styles.modalTitle}>Invalid Input</Text>
+            <Text style={styles.modalMessage}>{validationMessage}</Text>
             <TouchableOpacity
               style={styles.modalBtn}
               onPress={() => setValidationModalVisible(false)}
