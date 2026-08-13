@@ -1,16 +1,30 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
 
-const supabaseUrl = 'YOUR_SUPABASE_URL'; // Replace with your URL or process.env
-const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY'; // Replace with your Key or process.env
+const supabaseUrl = 'https://vaomdzazvcqemijkhujp.supabase.co'; 
+const supabaseAnonKey = 'sb_publishable_thSGK68b5Aq3UGb_sBJ2BQ_ImH26D3O';
+
+// Custom storage wrapper that prevents "window is not defined" crashes on web/server
+const CustomStorage = {
+  getItem: async (key: string) => {
+    if (typeof window === 'undefined') return null;
+    return AsyncStorage.getItem(key);
+  },
+  setItem: async (key: string, value: string) => {
+    if (typeof window === 'undefined') return;
+    return AsyncStorage.setItem(key, value);
+  },
+  removeItem: async (key: string) => {
+    if (typeof window === 'undefined') return;
+    return AsyncStorage.removeItem(key);
+  },
+};
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Tell Supabase to use AsyncStorage to cache session tokens locally
-    storage: AsyncStorage,
+    storage: CustomStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: Platform.OS === 'web',
+    detectSessionInUrl: false,
   },
 });

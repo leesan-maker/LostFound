@@ -169,78 +169,60 @@ export default function ReportItemScreen() {
   };
 
   // Submit Handler with Strict Validations
-  const handleSubmit = async () => {
-    const cleanPhone = phone.trim();
-    const cleanEmail = email.trim();
+ const handleSubmit = async () => {
+  const cleanPhone = phone.trim();
+  const cleanEmail = email.trim();
 
-    // 1. Check Empty Fields
-    if (
-      !itemName.trim() ||
-      !description.trim() ||
-      !date.trim() ||
-      !location.trim() ||
-      !cleanPhone ||
-      !cleanEmail
-    ) {
-      setValidationMessage('Please fill in all required fields before submitting.');
-      setValidationModalVisible(true);
-      return;
-    }
+  // 1. Minimum character length checks for text fields
+  if (itemName.trim().length < 2 || description.trim().length < 5 || location.trim().length < 2) {
+    setValidationMessage('Please provide more detailed information for the item.');
+    setValidationModalVisible(true);
+    return;
+  }
 
-    // 2. Strict Phone Validation (Numbers only, minimum 7 digits)
-    if (cleanPhone.length < 7) {
-      setValidationMessage('Please enter a valid phone number (at least 7 digits).');
-      setValidationModalVisible(true);
-      return;
-    }
+  // 2. Strict Phone Validation (Numbers only, at least 7 digits)
+  const phoneNumbersOnly = cleanPhone.replace(/[^0-9]/g, '');
+  if (phoneNumbersOnly.length < 7) {
+    setValidationMessage('Please enter a valid phone number with at least 7 digits.');
+    setValidationModalVisible(true);
+    return;
+  }
 
-    // 3. Strict Email Validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(cleanEmail)) {
-      setValidationMessage('Please enter a valid email address (e.g., name@domain.com).');
-      setValidationModalVisible(true);
-      return;
-    }
+  // 3. Strict Email Check
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(cleanEmail)) {
+    setValidationMessage('Please enter a valid email address.');
+    setValidationModalVisible(true);
+    return;
+  }
 
-    setLoading(true);
+  // Proceed with Supabase submission...
+  setLoading(true);
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from('items').insert([
+      {
+        user_id: user.id,
+        type: reportType,
+        title: itemName,
+        description,
+        date,
+        location,
+        phone: phoneNumbersOnly,
+        email: cleanEmail,
+      },
+    ]);
 
-      if (!user) {
-        alert('You must be logged in to submit a report.');
-        setLoading(false);
-        return;
-      }
-
-      let finalImageUrl: string | null = null;
-      if (imageUri) {
-        finalImageUrl = await uploadImageToSupabase(imageUri);
-      }
-
-      const { error } = await supabase.from('items').insert([
-        {
-          user_id: user.id,
-          type: reportType,
-          title: itemName,
-          description,
-          date,
-          location,
-          phone: cleanPhone,
-          email: cleanEmail,
-          image_url: finalImageUrl,
-        },
-      ]);
-
-      if (error) throw error;
-
-      setSuccessModalVisible(true);
-    } catch (err: any) {
-      alert('Submission Error: ' + (err.message || 'Something went wrong while submitting.'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (error) throw error;
+    setSuccessModalVisible(true);
+  } catch (err: any) {
+    alert(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSuccessClose = () => {
     setSuccessModalVisible(false);
@@ -403,7 +385,7 @@ export default function ReportItemScreen() {
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="5551234567"
+                placeholder="021 123 4567"
                 placeholderTextColor="#9ca3af"
                 keyboardType="phone-pad"
                 value={phone}

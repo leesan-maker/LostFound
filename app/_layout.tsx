@@ -1,22 +1,22 @@
 import { supabase } from '@/lib/supabase';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 export default function RootLayout() {
   const [session, setSession] = useState<any>(null);
-  const [initialized, setInitialized] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+
   const router = useRouter();
   const segments = useSegments();
+  const navigationState = useRootNavigationState();
 
   useEffect(() => {
-    // 1. Get initial session on app load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setInitialized(true);
+      setInitializing(false);
     });
 
-    // 2. Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
@@ -25,23 +25,20 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!initialized) return;
+    if (!navigationState?.key || initializing) return;
 
-    // Check if user is currently inside the (auth) / login screens
     const inAuthGroup = segments[0] === 'login';
 
     if (!session && !inAuthGroup) {
-      // Not logged in -> send to login
       router.replace('/login');
     } else if (session && inAuthGroup) {
-      // Logged in but sitting on login screen -> send to main app
       router.replace('/(tabs)');
     }
-  }, [session, initialized, segments]);
+  }, [session, initializing, segments, navigationState?.key]);
 
-  if (!initialized) {
+  if (initializing) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}>
         <ActivityIndicator size="large" color="#000000" />
       </View>
     );
