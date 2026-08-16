@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -31,11 +31,22 @@ interface Item {
   created_at?: string;
 }
 
+type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+
+const sortLabels: Record<SortOption, string> = {
+  'newest': 'Date (Newest First)',
+  'oldest': 'Date (Oldest First)',
+  'title-asc': 'A-Z',
+  'title-desc': 'Z-A',
+};
+
 export default function HomeScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'lost' | 'found'>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
   const { width } = useWindowDimensions();
@@ -70,11 +81,35 @@ export default function HomeScreen() {
     fetchItems();
   };
 
-  const filteredItems = items.filter((item) => {
-    if (filter === 'lost') return item.type === 'lost';
-    if (filter === 'found') return item.type === 'found';
-    return true;
-  });
+  // Filter & Sort Logic combined
+  const processedItems = useMemo(() => {
+    let filtered = items.filter((item) => {
+      if (filter === 'lost') return item.type === 'lost';
+      if (filter === 'found') return item.type === 'found';
+      return true;
+    });
+
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'newest':
+          return (
+            new Date(b.created_at || b.date).getTime() -
+            new Date(a.created_at || a.date).getTime()
+          );
+        case 'oldest':
+          return (
+            new Date(a.created_at || a.date).getTime() -
+            new Date(b.created_at || b.date).getTime()
+          );
+        case 'title-asc':
+          return a.title.localeCompare(b.title);
+        case 'title-desc':
+          return b.title.localeCompare(a.title);
+        default:
+          return 0;
+      }
+    });
+  }, [items, filter, sortBy]);
 
   const totalCount = items.length;
   const lostCount = items.filter((i) => i.type === 'lost').length;
@@ -157,10 +192,47 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Custom Dropdown Sort Selector */}
+        <View style={styles.dropdownContainer}>
+          <TouchableOpacity
+            style={styles.dropdownHeader}
+            onPress={() => setIsDropdownOpen(!isDropdownOpen)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.dropdownHeaderText}>{sortLabels[sortBy]}</Text>
+            <Text style={styles.dropdownArrow}>{isDropdownOpen ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+
+          {isDropdownOpen && (
+            <View style={styles.dropdownMenu}>
+              {(Object.keys(sortLabels) as SortOption[]).map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setSortBy(option);
+                    setIsDropdownOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      sortBy === option && styles.dropdownItemTextActive,
+                    ]}
+                  >
+                    {sortLabels[option]}
+                  </Text>
+                  {sortBy === option && <Text style={styles.checkmark}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* Item Count */}
         <View style={styles.itemCountRow}>
           <Text style={styles.itemCountText}>
-            {filteredItems.length} {filteredItems.length === 1 ? 'item' : 'items'}
+            {processedItems.length} {processedItems.length === 1 ? 'item' : 'items'}
           </Text>
         </View>
 
@@ -169,7 +241,7 @@ export default function HomeScreen() {
           <View style={styles.loaderContainer}>
             <ActivityIndicator size="large" color="#111827" />
           </View>
-        ) : filteredItems.length === 0 ? (
+        ) : processedItems.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateTitle}>No items reported yet</Text>
             <Text style={styles.emptyStateSubtext}>
@@ -178,7 +250,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           <View style={styles.cardsList}>
-            {filteredItems.map((item) => (
+            {processedItems.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.itemCard}
@@ -357,7 +429,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#ffffff',
   },
   scrollContent: {
     paddingVertical: 24,
@@ -410,7 +482,7 @@ const styles = StyleSheet.create({
   },
   filterBar: {
     flexDirection: 'row',
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#f3f4f6',
     borderRadius: 12,
     padding: 4,
     gap: 4,
@@ -431,6 +503,65 @@ const styles = StyleSheet.create({
   },
   filterTabTextActive: {
     color: '#111827',
+  },
+  dropdownContainer: {
+    position: 'relative',
+    zIndex: 10,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  dropdownArrow: {
+    fontSize: 10,
+    color: '#6b7280',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 48,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 20,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  dropdownItemTextActive: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  checkmark: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: 'bold',
   },
   itemCountRow: {
     paddingHorizontal: 4,
