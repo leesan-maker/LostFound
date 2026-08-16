@@ -6,47 +6,48 @@ import { ActivityIndicator, View } from 'react-native';
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
+    // 1. Fetch initial session from storage
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setIsLoading(false);
+      setInitialized(true);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setIsLoading(false);
-    });
+    // 2. Listen for authentication changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setInitialized(true);
+      }
+    );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (!initialized) return;
 
-    // Cast as string to resolve TypeScript union mismatch
-    const currentRoute = segments[0] as string | undefined;
-    const isAuthRoute = currentRoute === 'login' || currentRoute === 'signup';
-    const isLandingRoute = currentRoute === undefined || currentRoute === 'index';
+    const inAuthGroup = segments[0] === '(tabs)';
 
-    const timeout = setTimeout(() => {
-      if (!session && !isAuthRoute && !isLandingRoute) {
-        router.replace('/login');
-      } else if (session && isAuthRoute) {
-        router.replace('/(tabs)');
-      }
-    }, 0);
+    // Redirect logic
+    if (!session && inAuthGroup) {
+      router.replace('/'); 
+    } else if (session && !inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [session, initialized, segments]);
 
-    return () => clearTimeout(timeout);
-  }, [session, isLoading, segments]);
-
-  if (isLoading) {
+  // Show loading indicator until auth state is confirmed
+  if (!initialized) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f4f6' }}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#111827" />
       </View>
     );
   }
@@ -55,8 +56,6 @@ export default function RootLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="login" />
-      <Stack.Screen name="signup" />
     </Stack>
   );
 }
