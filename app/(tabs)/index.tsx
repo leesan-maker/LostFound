@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -35,6 +36,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'lost' | 'found'>('all');
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
@@ -177,8 +179,12 @@ export default function HomeScreen() {
         ) : (
           <View style={styles.cardsList}>
             {filteredItems.map((item) => (
-              <View key={item.id} style={styles.itemCard}>
-                
+              <TouchableOpacity
+                key={item.id}
+                style={styles.itemCard}
+                onPress={() => setSelectedItem(item)}
+                activeOpacity={0.9}
+              >
                 {/* Image Display */}
                 <Image
                   source={
@@ -206,9 +212,15 @@ export default function HomeScreen() {
                     </View>
                   </View>
 
-                  {/* Description */}
+                  {/* Truncated Description */}
                   {!!item.description && (
-                    <Text style={styles.cardDescription}>{item.description}</Text>
+                    <Text
+                      style={styles.cardDescription}
+                      numberOfLines={2}
+                      ellipsizeMode="tail"
+                    >
+                      {item.description}
+                    </Text>
                   )}
 
                   {/* Details */}
@@ -242,10 +254,100 @@ export default function HomeScreen() {
                   </View>
 
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}
+
+        {/* Full Item Detail Modal */}
+        <Modal
+          visible={selectedItem !== null}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setSelectedItem(null)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setSelectedItem(null)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={styles.modalContent}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Title & Badge */}
+                <View style={styles.titleRow}>
+                  <Text style={styles.modalTitle}>{selectedItem?.title}</Text>
+                  <View
+                    style={[
+                      styles.badge,
+                      selectedItem?.type === 'lost' ? styles.badgeLost : styles.badgeFound,
+                    ]}
+                  >
+                    <Text style={styles.badgeText}>
+                      {selectedItem?.type === 'lost' ? 'Lost' : 'Found'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Modal Image */}
+                <Image
+                  source={
+                    selectedItem?.image_url
+                      ? { uri: selectedItem.image_url }
+                      : placeholderImage
+                  }
+                  style={styles.modalImage}
+                  resizeMode={selectedItem?.image_url ? 'cover' : 'contain'}
+                />
+
+                {/* Full Description */}
+                <Text style={styles.modalDescription}>
+                  {selectedItem?.description}
+                </Text>
+
+                {/* Location & Date */}
+                <View style={styles.detailsGroup}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailIcon}>📍</Text>
+                    <Text style={styles.detailText}>{selectedItem?.location}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailIcon}>📅</Text>
+                    <Text style={styles.detailText}>{selectedItem?.date}</Text>
+                  </View>
+                </View>
+
+                {/* Modal Contact Buttons */}
+                <View style={[styles.actionButtonsRow, { marginTop: 16 }]}>
+                  <TouchableOpacity
+                    style={styles.callBtn}
+                    onPress={() => handleCall(selectedItem?.phone)}
+                  >
+                    <Text style={styles.callBtnText}>📞 Call</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.emailBtn}
+                    onPress={() => handleEmail(selectedItem?.email)}
+                  >
+                    <Text style={styles.emailBtnText}>✉️ Email</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Close Button */}
+                <TouchableOpacity
+                  style={styles.closeModalBtn}
+                  onPress={() => setSelectedItem(null)}
+                >
+                  <Text style={styles.closeModalBtnText}>Close</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
 
       </View>
     </ScrollView>
@@ -453,6 +555,52 @@ const styles = StyleSheet.create({
   },
   emailBtnText: {
     color: '#111827',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+  },
+  modalImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginVertical: 14,
+    backgroundColor: '#f8fafc',
+  },
+  modalDescription: {
+    fontSize: 15,
+    color: '#374151',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  closeModalBtn: {
+    backgroundColor: '#111827',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  closeModalBtnText: {
+    color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
   },

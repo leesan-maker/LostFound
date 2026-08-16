@@ -91,36 +91,34 @@ const styles = StyleSheet.create({
   subtitle: {
     lineHeight: 22,
     color: '#475569',
-
   },
   primaryButton: {
     width: '100%',
     backgroundColor: '#0F172A',
     borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     justifyContent: 'center',
+    alignItems: 'center',
     height: 50,
   },
   primaryButtonText: {
     color: '#FFFFFF',
     textAlign: 'center',
     fontSize: 16,
-    paddingLeft: 152,
   },
   secondaryButton: {
     width: '100%',
     borderWidth: 1,
     borderColor: '#0F172A',
     borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     justifyContent: 'center',
+    alignItems: 'center',
     height: 50,
-    
   },
   secondaryButtonText: {
     color: '#0F172A',
     textAlign: 'center',
     fontSize: 16,
-    paddingLeft: 147,
   },
 });

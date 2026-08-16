@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +26,13 @@ interface Item {
   user_id?: string;
 }
 
+interface ModalConfig {
+  visible: boolean;
+  title: string;
+  message: string;
+  itemIdToDelete: string | null;
+}
+
 export default function MyPageScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -34,6 +41,14 @@ export default function MyPageScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Custom Modal State
+  const [modalConfig, setModalConfig] = useState<ModalConfig>({
+    visible: false,
+    title: '',
+    message: '',
+    itemIdToDelete: null,
+  });
 
   useEffect(() => {
     fetchUserDataAndSubmissions();
@@ -77,51 +92,59 @@ export default function MyPageScreen() {
     router.replace('/login');
   };
 
-  const handleMarkStatus = async (itemId: string, newStatus: string) => {
-    try {
-      const { error } = await supabase
-        .from('items')
-        .update({ status: newStatus })
-        .eq('id', itemId);
-
-      if (error) throw error;
-      
-      fetchUserDataAndSubmissions();
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  // Delete item handler
+  // Perform actual deletion
   const handleDeleteItem = async (itemId: string) => {
     try {
+      setSubmissions((prevItems) => prevItems.filter((item) => item.id !== itemId));
+
       const { error } = await supabase
         .from('items')
         .delete()
         .eq('id', itemId);
 
       if (error) throw error;
-
-      // Update state locally so the item disappears immediately
-      setSubmissions((prevItems) => prevItems.filter((item) => item.id !== itemId));
     } catch (err: any) {
-      Alert.alert('Error deleting item', err.message);
+      console.error('Error deleting item:', err.message);
+      fetchUserDataAndSubmissions();
     }
   };
 
+  // Trigger modal when user clicks "Mark Found" or "Returned"
+  const handleMarkStatus = (itemId: string, actionType: 'found' | 'returned') => {
+    const title = actionType === 'found' ? 'Mark as Found' : 'Mark as Returned';
+    const message = actionType === 'found'
+      ? 'Are you sure this item was found? This will remove the listing.'
+      : 'Are you sure this item was returned? This will remove the listing.';
+
+    setModalConfig({
+      visible: true,
+      title,
+      message,
+      itemIdToDelete: itemId,
+    });
+  };
+
+  // Trigger modal when user clicks the Trash icon
   const confirmDelete = (itemId: string) => {
-    Alert.alert(
-      'Delete Submission',
-      'Are you sure you want to delete this reported item? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => handleDeleteItem(itemId),
-        },
-      ]
-    );
+    setModalConfig({
+      visible: true,
+      title: 'Delete Submission',
+      message: 'Are you sure you want to delete this reported item? This action cannot be undone.',
+      itemIdToDelete: itemId,
+    });
+  };
+
+  // Modal Confirm Action
+  const handleModalConfirm = () => {
+    if (modalConfig.itemIdToDelete) {
+      handleDeleteItem(modalConfig.itemIdToDelete);
+    }
+    setModalConfig((prev) => ({ ...prev, visible: false }));
+  };
+
+  // Modal Cancel Action
+  const handleModalCancel = () => {
+    setModalConfig((prev) => ({ ...prev, visible: false }));
   };
 
   return (
@@ -199,7 +222,7 @@ export default function MyPageScreen() {
                     <Text style={styles.metaText}>📅 {item.date}</Text>
                   </View>
 
-                  {/* Edit / Status / Delete Action Buttons */}
+                  {/* Action Buttons */}
                   <View style={styles.cardActions}>
                     {item.type === 'lost' ? (
                       <TouchableOpacity
@@ -217,10 +240,6 @@ export default function MyPageScreen() {
                       </TouchableOpacity>
                     )}
 
-                    <TouchableOpacity style={styles.editBtn}>
-                      <Text style={styles.editText}>✏️ Edit</Text>
-                    </TouchableOpacity>
-
                     <TouchableOpacity
                       style={styles.deleteBtn}
                       onPress={() => confirmDelete(item.id)}
@@ -235,6 +254,32 @@ export default function MyPageScreen() {
         )}
 
       </View>
+
+      {/* CUSTOM POPUP MODAL */}
+      <Modal
+        visible={modalConfig.visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleModalCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.warningIcon}>⚠️</Text>
+            <Text style={styles.modalTitle}>{modalConfig.title}</Text>
+            <Text style={styles.modalMessage}>{modalConfig.message}</Text>
+
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleModalConfirm}>
+                <Text style={styles.modalConfirmText}>Confirm & Remove</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={handleModalCancel}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -309,11 +354,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   submissionsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 16,
+},
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -439,19 +484,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  editBtn: {
-    flex: 2,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  editText: {
-    color: '#374151',
-    fontWeight: '600',
-    fontSize: 13,
-  },
   deleteBtn: {
     flex: 1,
     backgroundColor: '#fee2e2',
@@ -464,5 +496,71 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     fontSize: 14,
+  },
+
+  /* MODAL STYLES */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  warningIcon: {
+    fontSize: 42,
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalButtonContainer: {
+    width: '100%',
+    gap: 8,
+  },
+  modalConfirmBtn: {
+    width: '100%',
+    backgroundColor: '#dc2626',
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  modalConfirmText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalCancelBtn: {
+    width: '100%',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: '#6b7280',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

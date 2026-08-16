@@ -1,22 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
-const supabaseUrl = 'https://vaomdzazvcqemijkhujp.supabase.co'; 
-const supabaseAnonKey = 'sb_publishable_thSGK68b5Aq3UGb_sBJ2BQ_ImH26D3O';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// Custom storage wrapper that prevents "window is not defined" crashes on web/server
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY in .env file');
+}
+
 const CustomStorage = {
   getItem: async (key: string) => {
-    if (typeof window === 'undefined') return null;
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') {
+        return window.localStorage.getItem(key);
+      }
+      return null;
+    }
     return AsyncStorage.getItem(key);
   },
   setItem: async (key: string, value: string) => {
-    if (typeof window === 'undefined') return;
-    return AsyncStorage.setItem(key, value);
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, value);
+      }
+      return;
+    }
+    await AsyncStorage.setItem(key, value);
   },
   removeItem: async (key: string) => {
-    if (typeof window === 'undefined') return;
-    return AsyncStorage.removeItem(key);
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(key);
+      }
+      return;
+    }
+    await AsyncStorage.removeItem(key);
   },
 };
 
