@@ -19,9 +19,13 @@ export default function RootLayout() {
 
     // 2. Listen for authentication changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setSession(session);
         setInitialized(true);
+
+        if (event === 'SIGNED_OUT' || !session) {
+          router.replace('/');
+        }
       }
     );
 
@@ -37,7 +41,7 @@ export default function RootLayout() {
 
     // Redirect logic
     if (!session && inAuthGroup) {
-      router.replace('/'); 
+      router.replace('/');
     } else if (session && !inAuthGroup) {
       router.replace('/(tabs)');
     }

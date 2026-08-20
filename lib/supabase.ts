@@ -10,30 +10,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const CustomStorage = {
-  getItem: async (key: string) => {
+  getItem: async (key: string): Promise<string | null> => {
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined') {
-        return window.localStorage.getItem(key);
+        return Promise.resolve(window.localStorage.getItem(key));
       }
-      return null;
+      return Promise.resolve(null);
     }
     return AsyncStorage.getItem(key);
   },
-  setItem: async (key: string, value: string) => {
+  setItem: async (key: string, value: string): Promise<void> => {
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(key, value);
       }
-      return;
+      return Promise.resolve();
     }
     await AsyncStorage.setItem(key, value);
   },
-  removeItem: async (key: string) => {
+  removeItem: async (key: string): Promise<void> => {
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(key);
       }
-      return;
+      return Promise.resolve();
     }
     await AsyncStorage.removeItem(key);
   },

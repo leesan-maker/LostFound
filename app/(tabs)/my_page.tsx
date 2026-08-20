@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -82,15 +83,26 @@ export default function MyPageScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
+  const handleSignedOut = async (action: 'Logout' | 'Switch account') => {
+    try {
+      await supabase.auth.signOut();
+      setUserEmail(null);
+      setSubmissions([]);
+
+      if (Platform.OS === 'web') {
+        window.location.href = '/';
+      } else {
+        router.dismissAll();
+        router.replace('/');
+      }
+    } catch (err: any) {
+      console.error(`${action} error:`, err);
+    }
   };
 
-  const handleSwitchAccount = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
-  };
+  const handleLogout = () => handleSignedOut('Logout');
+
+  const handleSwitchAccount = () => handleSignedOut('Switch account');
 
   // Perform actual deletion
   const handleDeleteItem = async (itemId: string) => {
@@ -354,11 +366,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   submissionsHeader: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 16,
-},
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -497,8 +509,6 @@ const styles = StyleSheet.create({
   deleteText: {
     fontSize: 14,
   },
-
-  /* MODAL STYLES */
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
